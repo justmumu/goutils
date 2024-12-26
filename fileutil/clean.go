@@ -6,7 +6,8 @@ import (
 )
 
 var (
-	DefaultFilePermission = os.FileMode(0644)
+	DefaultFilePermission   = os.FileMode(0644)
+	DefaultFolderPermission = os.FileMode(0755)
 )
 
 // CleanPath cleans given path to mitigate any possible path traversal.
@@ -113,5 +114,5 @@ func CreateMissingDirs(path string) error {
 		return err
 	}
 
-	return os.MkdirAll(filepath.Dir(abs), DefaultFilePermission)
+	return os.MkdirAll(filepath.Dir(abs), DefaultFolderPermission)
 }

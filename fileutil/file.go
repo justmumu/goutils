@@ -84,7 +84,7 @@ func CreateFolder(path string) error {
 	if err != nil {
 		return err
 	}
-	return os.MkdirAll(abs, DefaultFilePermission)
+	return os.MkdirAll(abs, DefaultFolderPermission)
 }
 
 // GetTempFileName generate a temporary file name
