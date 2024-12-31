@@ -164,3 +164,13 @@ func Named(s string) Logger {
 func Sync() error {
 	return DefaultLogger.Sync()
 }
+
+// SetConsoleLevel sets the console log level
+func SetConsoleLevel(level LogLevel) {
+	DefaultLogger.SetConsoleLevel(level)
+}
+
+// SetFileLevel sets the file log level
+func SetFileLevel(level LogLevel) {
+	DefaultLogger.SetFileLevel(level)
+}

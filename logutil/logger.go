@@ -115,20 +115,30 @@ type Logger interface {
 	// Sync calls the underlying Core's Sync method, flushing any buffered log
 	// entries. Applications should take care to call Sync before exiting.
 	Sync() error
+	// SetConsoleLevel sets the logging level for the console logger.
+	SetConsoleLevel(level LogLevel)
+	// SetFileLevel sets the logging level for the file logger.
+	SetFileLevel(level LogLevel)
 }
 
 type logger struct {
+	consoleAtomLvl zap.AtomicLevel
+	fileAtomLvl    zap.AtomicLevel
+
 	unsugared *zap.Logger
 	*zap.SugaredLogger
 }
 
 func NewLogger(config LoggerConfig) Logger {
+	ll := &logger{}
 	// Prepare logging level
 	var consoleLevel zapcore.Level
 	consoleLevel.Set(strings.ToLower(config.ConsoleLevel.String()))
+	ll.consoleAtomLvl = zap.NewAtomicLevelAt(consoleLevel)
 
 	var fileLevel zapcore.Level
 	fileLevel.Set(strings.ToLower(config.FileLevel.String()))
+	ll.fileAtomLvl = zap.NewAtomicLevelAt(fileLevel)
 
 	// Prepare encoder configs
 	consoleEncoderConfig := zapcore.EncoderConfig{
@@ -155,15 +165,6 @@ func NewLogger(config LoggerConfig) Logger {
 		EncodeDuration: zapcore.NanosDurationEncoder,
 	}
 
-	// Prepare level enablers
-	consoleLevelEnabler := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
-		return lvl >= consoleLevel
-	})
-
-	fileLevelEnabler := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
-		return lvl >= fileLevel
-	})
-
 	// Prepare encoders
 	jsonEncoder := zapcore.NewJSONEncoder(jsonEncoderConfig)
 
@@ -172,12 +173,12 @@ func NewLogger(config LoggerConfig) Logger {
 
 	if config.ConsoleEnabled {
 		if config.ConsoleJson {
-			cores = append(cores, zapcore.NewCore(jsonEncoder, zapcore.Lock(os.Stderr), consoleLevelEnabler))
+			cores = append(cores, zapcore.NewCore(jsonEncoder, zapcore.Lock(os.Stderr), ll.consoleAtomLvl))
 		} else {
 			coloredTextEncoderConfig := consoleEncoderConfig
 			coloredTextEncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
 			coloredTextEncoder := zapcore.NewConsoleEncoder(coloredTextEncoderConfig)
-			cores = append(cores, zapcore.NewCore(coloredTextEncoder, zapcore.Lock(os.Stderr), consoleLevelEnabler))
+			cores = append(cores, zapcore.NewCore(coloredTextEncoder, zapcore.Lock(os.Stderr), ll.consoleAtomLvl))
 		}
 	}
 
@@ -185,12 +186,12 @@ func NewLogger(config LoggerConfig) Logger {
 		fileSyncer := newRotateFile(config)
 		if fileSyncer != nil {
 			if config.FileJson {
-				cores = append(cores, zapcore.NewCore(jsonEncoder, newRotateFile(config), fileLevelEnabler))
+				cores = append(cores, zapcore.NewCore(jsonEncoder, newRotateFile(config), ll.fileAtomLvl))
 			} else {
 				uncoloredTextEncoderConfig := consoleEncoderConfig
 				uncoloredTextEncoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder
 				uncoloredTextEncoder := zapcore.NewConsoleEncoder(uncoloredTextEncoderConfig)
-				cores = append(cores, zapcore.NewCore(uncoloredTextEncoder, newRotateFile(config), fileLevelEnabler))
+				cores = append(cores, zapcore.NewCore(uncoloredTextEncoder, newRotateFile(config), ll.fileAtomLvl))
 			}
 		}
 	}
@@ -202,19 +203,34 @@ func NewLogger(config LoggerConfig) Logger {
 	if config.Name != "" {
 		unsugared = unsugared.Named(strings.ReplaceAll(strings.ToLower(config.Name), " ", "_"))
 	}
+	ll.unsugared = unsugared
+	ll.SugaredLogger = unsugared.Sugar()
 
-	return &logger{
-		unsugared:     unsugared,
-		SugaredLogger: unsugared.Sugar(),
-	}
+	return ll
+}
+
+// SetConsoleLevel sets the logging level for the console logger.
+func (l *logger) SetConsoleLevel(level LogLevel) {
+	var consoleLevel zapcore.Level
+	consoleLevel.Set(strings.ToLower(level.String()))
+	l.consoleAtomLvl.SetLevel(consoleLevel)
+}
+
+// SetFileLevel sets the logging level for the file logger.
+func (l *logger) SetFileLevel(level LogLevel) {
+	var fileLevel zapcore.Level
+	fileLevel.Set(strings.ToLower(level.String()))
+	l.fileAtomLvl.SetLevel(fileLevel)
 }
 
 // Named adds a new path segment to the logger's name. Segments are joined by periods. By default, Loggers are unnamed.
 func (l *logger) Named(s string) Logger {
 	ll := l.unsugared.Named(s)
 	return &logger{
-		unsugared:     ll,
-		SugaredLogger: ll.Sugar(),
+		consoleAtomLvl: l.consoleAtomLvl,
+		fileAtomLvl:    l.fileAtomLvl,
+		unsugared:      ll,
+		SugaredLogger:  ll.Sugar(),
 	}
 }
 
