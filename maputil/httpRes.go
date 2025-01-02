@@ -3,11 +3,9 @@ package maputil
 import (
 	"bufio"
 	"bytes"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httputil"
-	"strconv"
 	"strings"
 )
 
@@ -29,59 +27,55 @@ import (
 //			"Some-Header": "test"
 //		}
 //	}
-type HTTPResponseMap map[string]map[string]string
+type HTTPResponseMap map[string]interface{}
 
 // Response returns http.Response instance by loading from raw request
 func (hrm HTTPResponseMap) Response() (*http.Response, error) {
-	req, err := http.ReadRequest(bufio.NewReader(bytes.NewReader(bytes.NewBufferString(hrm["request"]["raw"]).Bytes())))
+	reqObj := hrm["request"].(map[string]interface{})
+
+	req, err := http.ReadRequest(bufio.NewReader(strings.NewReader(reqObj["raw_without_body"].(string))))
 	if err != nil {
 		return nil, err
 	}
-	return http.ReadResponse(bufio.NewReader(bytes.NewReader(bytes.NewBufferString(hrm["response"]["raw"]).Bytes())), req)
+
+	respObj := hrm["response"].(map[string]interface{})
+	return http.ReadResponse(bufio.NewReader(strings.NewReader(respObj["raw"].(string))), req)
 }
 
 // ContentLength returns response's content length
-func (hrm HTTPResponseMap) ContentLength() int64 {
-	val, _ := strconv.ParseInt(hrm["response"]["content_length"], 10, 16)
-	return val
+func (hrm HTTPResponseMap) ContentLength() int {
+	respObj := hrm["response"].(map[string]interface{})
+	return respObj["content_length"].(int)
 }
 
 // StatusCode returns response's status code
 func (hrm HTTPResponseMap) StatusCode() int {
-	val, _ := strconv.ParseInt(hrm["response"]["status_code"], 10, 16)
-	return int(val)
+	respObj := hrm["response"].(map[string]interface{})
+	return respObj["status_code"].(int)
 }
 
 // Body returns response's body as string
 func (hrm HTTPResponseMap) Body() string {
-	return hrm["response"]["body"]
+	respObj := hrm["response"].(map[string]interface{})
+	return respObj["body"].(string)
 }
 
 // Headers returns all header as http.Header instance
 func (hrm HTTPResponseMap) Headers() http.Header {
-	returnVal := make(map[string][]string)
-
-	for k, vv := range hrm["headers"] {
-		returnVal[k] = strings.Split(vv, multiValueSeparator)
-	}
-	return returnVal
+	respObj := hrm["response"].(map[string]interface{})
+	return respObj["headers"].(http.Header)
 }
 
 func NewHTTPResponseMap(resp *http.Response) (HTTPResponseMap, error) {
-	m := make(map[string]map[string]string)
+	mm := make(map[string]interface{})
 
-	request := make(map[string]string)
-	req, err := httputil.DumpRequest(resp.Request, true)
-	if err != nil {
-		return nil, err
-	}
-	request["raw"] = string(req)
-	m["request"] = request
+	response := make(map[string]interface{})
 
-	// Setup response
-	response := make(map[string]string)
-	response["content_length"] = fmt.Sprintf("%d", resp.ContentLength)
-	response["status_code"] = fmt.Sprintf("%d", resp.StatusCode)
+	// Setup root variables
+	response["proto"] = resp.Proto
+	response["status_code"] = resp.StatusCode
+	response["status_text"] = http.StatusText(resp.StatusCode)
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
@@ -89,26 +83,30 @@ func NewHTTPResponseMap(resp *http.Response) (HTTPResponseMap, error) {
 	resp.Body.Close()
 	resp.Body = io.NopCloser(bytes.NewBuffer(body))
 	response["body"] = string(body)
+	response["content_length"] = len(body)
 
 	r, err := httputil.DumpResponse(resp, true)
 	if err != nil {
 		return nil, err
 	}
-	response["response"] = string(r)
-	m["response"] = response
+	response["raw"] = string(r)
 
-	hm := make(map[string]string)
-	for k, v := range resp.Header {
-		var vv string
-		for i, val := range v {
-			vv += strings.TrimSpace(val)
-			if i+1 < len(v) {
-				vv += multiValueSeparator
-			}
-		}
-		hm[strings.TrimSpace(k)] = vv
+	// Setup headers
+	response["headers"] = resp.Header
+
+	// Setup request
+	mReq, err := NewHTTPRequestMap(resp.Request)
+	if err != nil {
+		return nil, err
 	}
-	m["headers"] = hm
+	requestObject := mReq["request"].(map[string]interface{})
+	delete(requestObject, "body")
+	reqRaw := requestObject["raw"].(string)
+	delete(requestObject, "raw")
+	requestObject["raw_without_body"] = reqRaw
 
-	return m, nil
+	mm["response"] = response
+	mm["request"] = requestObject
+
+	return mm, nil
 }

@@ -4,10 +4,6 @@ import (
 	extmaps "golang.org/x/exp/maps"
 )
 
-const (
-	multiValueSeparator string = ";;;;;"
-)
-
 // GetKeys returns the map's keys.
 func GetKeys[K comparable, V any](maps ...map[K]V) []K {
 	var keys []K
