@@ -96,6 +96,23 @@ type Logger interface {
 	// variadic key-value pairs are treated as they are in With.
 	Panicw(msg string, keysAndValues ...interface{})
 
+	// DPanic logs the provided arguments at [DPanicLevel].
+	// In development, the logger then panics. (See [DPanicLevel] for details.)
+	// Spaces are added between arguments when neither is a string.
+	DPanic(args ...interface{})
+	// DPanicf formats the message according to the format specifier
+	// and logs it at [DPanicLevel].
+	// In development, the logger then panics. (See [DPanicLevel] for details.)
+	DPanicf(template string, args ...interface{})
+	// DPanicln logs a message at [DPanicLevel].
+	// In development, the logger then panics. (See [DPanicLevel] for details.)
+	// Spaces are always added between arguments.
+	DPanicln(args ...interface{})
+	// DPanicw logs a message with some additional context. In development, the
+	// logger then panics. (See DPanicLevel for details.) The variadic key-value
+	// pairs are treated as they are in With.
+	DPanicw(msg string, keysAndValues ...interface{})
+
 	// Fatal constructs a message with the provided arguments and calls os.Exit.
 	// Spaces are added between arguments when neither is a string.
 	Fatal(args ...interface{})
